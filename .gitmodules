@@ -1,0 +1,4 @@
+[submodule "resonet"]
+	path = resonet
+	url = https://github.com/dermen/resonet.git
+	branch = master
