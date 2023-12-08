@@ -9,6 +9,8 @@ dependencies = [
     "h5py",
     "numpy",
     "torch",
+    "Pyro4",
+    "fabio"
 ]
 
 [project.scripts]
@@ -19,4 +21,6 @@ resonet-showmaster = "resonet.scripts.show_master:main"
 resonet-mergefiles = "resonet.scripts.merge_h5s:main"
 resonet-compresss = "resonet.scripts.compress:main"
 resonet-decompresss = "resonet.scripts.decompress:main"
+resonet-imgeater = "resonet.scripts.image_eater:main"
+resonet-imgfeeder = "resonet.scripts.image_feeder:main"
 
