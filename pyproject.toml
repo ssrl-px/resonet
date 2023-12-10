@@ -9,8 +9,11 @@ dependencies = [
     "h5py",
     "numpy",
     "torch",
+    "torchvision",
+    "torchmetrics",
     "Pyro4",
-    "fabio"
+    "fabio",
+    "dxtbx"
 ]
 
 [project.scripts]
