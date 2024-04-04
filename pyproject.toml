@@ -26,4 +26,5 @@ resonet-compresss = "resonet.scripts.compress:main"
 resonet-decompresss = "resonet.scripts.decompress:main"
 resonet-imgeater = "resonet.scripts.image_eater:main"
 resonet-imgfeeder = "resonet.scripts.image_feeder:main"
+resonet-mfx = "resonet.scripts.mfx:main"
 
