@@ -16,8 +16,13 @@ dependencies = [
     "dxtbx"
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["resonet"]
+
 [project.scripts]
 resonet-simulate = "resonet.sims.runme:main"
+resonet-simulate-joblib = "resonet.sims.runme_joblib:main"
 resonet-train = "resonet.net:main"
 resonet-plotloss = "resonet.scripts.plot_train:main"
 resonet-showmaster = "resonet.scripts.show_master:main"
