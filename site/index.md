@@ -8,7 +8,7 @@
 
 4. <a href="#advanced">Advanced (simulation-ready) installation</a>
 
-
+5. <a href="#hitfinder">Simulate hitfinder training data</a>
 
 <a id="models"></a>
 ## Download trained models 
@@ -100,86 +100,18 @@ The real benefit of `resonet` will come from running it in parallel (using e.g.,
 <a id="advanced"></a>
 ## Install a full simulation-ready build
 
-Note: this install is only necessary if one wishes to synthesize training data using CCTBX.
+Note: this install is only necessary if one wishes to synthesize training data using simtbx. Create a `simtbx` environment as shown [here](https://smb.slac.stanford.edu/~dermen/easybragg/). Then, with the environment active, install resonet like above:
 
-Create a conda environment for doing simulations:
-
-```bash
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
-wget https://raw.githubusercontent.com/dials/dials/main/.conda-envs/linux.txt
-bash ./Miniconda3-latest-Linux-x86_64.sh -b -u -p $PWD/miniforge
-source miniforge/etc/profile.d/conda.sh
-conda install -y -c conda-forge mamba
-mamba create -y -n py39 --file linux.txt python=3.9
 ```
-
-Then, install cuda, version 12+ (older versions work, but require different conda environments).
-
-With the conda env and CUDA installed, one can build CCTBX with CUDA support. Verify CUDA is indeed installed correctly and then set the standard CUDA environment
- 
-```bash
-export PATH=/usr/local/cuda-12.1/bin:$PATH
-export CUDA_HOME=/usr/local/cuda-12.1
-export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64
-```
-
-Check you can see the GPU(s) using ```nvidia-smi```. Then, activate the conda env:
-
-
-```bash
-conda activate py39
-```
-
-Now create a subfolder for building CCTBX and get the CCTBX bootstrap script:
-
-```bash
-mkdir ~/xtal
-cd xtal
-wget https://raw.githubusercontent.com/cctbx/cctbx_project/master/libtbx/auto_build/bootstrap.py
-```
-
-We will first use bootstrap to download all the sources into the `modules` folder:
-
-```bash
-python bootstrap.py  hot update --builder=dials --python=39 --use-conda=$CONDA_PREFIX
-```
-
-Now, you can run the build step:
-
-```bash
-python bootstrap.py build --builder=dials --python=39 --use-conda=$CONDA_PREFIX  \
-  --nproc=22 --config-flags="--enable_openmp_if_possible=True" --config-flags="--use_environment_flags" \
-  --config-flags="--enable_cuda" --config-flags="--enable_cxx11"
-
-source build/setpaths.sh
-```
-
-The build step creates a `build` subfolder that contains a shell script to launch the CCTBX environment. Its now a good idea to create a single startup script to launch CCTBX+CUDA environment at startup:
-
-```bash
-# example startup script:
-
-export PATH=/usr/local/cuda-12.1/bin:$PATH
-export CUDA_HOME=/usr/local/cuda-12.1
-export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64
-source ~/xtal_reso/build/setpaths.sh
-```
-
-Lastly, install pytorch, a few useful tools like ipython, and lastly resonet:
-
-```bash
-# after sourcing setpaths.sh, libtbx.python will be in path
-libtbx.python -m pip install torch torchvision torchmetrics jupyter ipython
-libtbx.refresh
-
-# Note, migration to PyPi is in progress, however for now one will need to build manually
-# libtbx.python -m pip install resonet
-
 git clone --recurse-submodules https://github.com/ssrl-px/resonet.git
 cd resonet
-libtbx.python -m build
-libtbx.python -m pip install dist/resonet-0.1.tar.gz
-libtbx.python patch_shebangs.py  # only necessary is using CCTBX build for simulation functionality
+
+# get the build module to build the software
+python -m pip install build
+
+# build and install with pip
+python -m build
+python -m pip install dist/resonet-0.1.tar.gz
 ```
 
 ### Synthesize training data
@@ -253,3 +185,39 @@ resonet-imgfeeder "/path/to/some/images/*cbf" 8
 ```
 
 where the second argument simply specifies the number of processes launched with `resonet-imgeater`. The *eater* will then write the inference results to STDOUT. Note, all images in the GLOB will be processed!
+
+<a id="hitfinder"></a>
+## Simulate hitfinder training data
+
+Here we show how to use resonet (a simulation-ready build) to create training data for a hit finder. We will use the Eiger geometry, which resonet can read from CBF files:
+
+```
+wget https://smb.slac.stanford.edu/~resonet/eiger_1_00001.cbf 
+```
+
+Then, we will run resonet-simulate twice, once to create hits (images with diffraction):
+
+```
+resonet-simulate-joblib sim_hits --nshot 20 --nmos 1 --saveRaw --geom eiger_1_00001.cbf  --randDist --randDistRange 100 300 --randWave --addBad --addHot --randQuad --compress --njobs 4 --ngpu=1
+```
+
+and again to create misses (images with background only):
+
+```
+resonet-simulate-joblib  sim_misses --nshot 20 --nmos 1 --saveRaw --geom eiger_1_00001.cbf  --randDist --randDistRange 100 300 --randWave --addBad --addHot --randQuad --compress  --bgOnly --njobs 4 --ngpu 1
+```
+
+This will create two sub-folders, one containing the simulated hits, and the other containing the simulated misses.
+
+
+Note, in an mpi environment, with mpirun/srun available, and a corresponding build of mpi4py, then one may issue commands like 
+
+```
+mpirun -n 10 resonet-simulate .. .. 
+```
+
+(and exclude the `--njobs` argument)
+
+
+
+

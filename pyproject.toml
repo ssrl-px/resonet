@@ -22,6 +22,7 @@ include = ["resonet"]
 
 [project.scripts]
 resonet-simulate = "resonet.sims.runme:main"
+resonet-viewsims = "resonet.scripts.view_sims:main"
 resonet-simulate-joblib = "resonet.sims.runme_joblib:main"
 resonet-train = "resonet.net:main"
 resonet-plotloss = "resonet.scripts.plot_train:main"
