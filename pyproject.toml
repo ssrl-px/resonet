@@ -13,12 +13,14 @@ dependencies = [
     "torchmetrics",
     "Pyro4",
     "fabio",
-    "dxtbx"
+    "dxtbx",
+    "joblib",
+    "tqdm"
 ]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["resonet"]
+include = ["resonet*"]
 
 [project.scripts]
 resonet-simulate = "resonet.sims.runme:main"
@@ -33,4 +35,5 @@ resonet-decompresss = "resonet.scripts.decompress:main"
 resonet-imgeater = "resonet.scripts.image_eater:main"
 resonet-imgfeeder = "resonet.scripts.image_feeder:main"
 resonet-mfx = "resonet.scripts.mfx:main"
+resonet-getsimdata = "resonet.scripts.get_simdata:main"
 
