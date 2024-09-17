@@ -106,12 +106,9 @@ Note: this install is only necessary if one wishes to synthesize training data u
 git clone --recurse-submodules https://github.com/ssrl-px/resonet.git
 cd resonet
 
-# get the build module to build the software
-python -m pip install build
-
 # build and install with pip
 python -m build
-python -m pip install dist/resonet-0.1.tar.gz
+pip install dist/resonet-0.1.tar.gz
 ```
 
 ### Synthesize training data
@@ -189,35 +186,192 @@ where the second argument simply specifies the number of processes launched with
 <a id="hitfinder"></a>
 ## Simulate hitfinder training data
 
-Here we show how to use resonet (a simulation-ready build) to create training data for a hit finder. We will use the Eiger geometry, which resonet can read from CBF files:
+Here we show how to use resonet (a simulation-ready build) to create training data for a hit finder. We will use an Eiger geometry, which resonet can read from CBF files:
 
 ```
 wget https://smb.slac.stanford.edu/~resonet/eiger_1_00001.cbf 
 ```
 
-Then, we will run resonet-simulate twice, once to create hits (images with diffraction):
+For production use, one will likely want to work in an MPI environment with multiple GPUs and compute nodes available. **Note, if working on a compute cluster, one will likely need to load openmpi and cuda modules (`module load openmpi cuda`, or similar, highly dependent on the given cluster)**, and then rebuild the `simtbx` package.
+
+For single-node usage, one can simply install mpi and mpi4py with conda
 
 ```
-resonet-simulate-joblib sim_hits --nshot 20 --nmos 1 --saveRaw --geom eiger_1_00001.cbf  --randDist --randDistRange 100 300 --randWave --addBad --addHot --randQuad --compress --njobs 4 --ngpu=1
+mamba install -c conda-forge openmpi mpi4py
 ```
 
-and again to create misses (images with background only):
+Check how many GPUs are available on a node:
 
 ```
-resonet-simulate-joblib  sim_misses --nshot 20 --nmos 1 --saveRaw --geom eiger_1_00001.cbf  --randDist --randDistRange 100 300 --randWave --addBad --addHot --randQuad --compress  --bgOnly --njobs 4 --ngpu 1
+$ nvidia-smi --list-gpus
+GPU 0: Tesla V100-PCIE-32GB (UUID: GPU-9c07d0b1-bf1a-593d-2706-b3b2dff1fb82)
+GPU 1: NVIDIA A100-PCIE-40GB (UUID: GPU-6b03e1cf-3783-39e5-4f4f-a254192fc6b2)
 ```
 
-This will create two sub-folders, one containing the simulated hits, and the other containing the simulated misses.
+If using a multi-node environment, resonet-simulate will assume this number is the same for all machines! 
 
-
-Note, in an mpi environment, with mpirun/srun available, and a corresponding build of mpi4py, then one may issue commands like 
+Then, we will run resonet-simulate with mpirun (or srun) and the `--ngpu=2` argument:
 
 ```
-mpirun -n 10 resonet-simulate .. .. 
+mpirun -n 12 resonet-simulate hitfinder_data --nshot 24 --nmos 1 --geom eiger_1_00001.cbf  --randDist --randDistRange 100 300 --randWave --addBad --addHot --randQuad --compress --ngpu=2 --randHits
 ```
 
-(and exclude the `--njobs` argument)
+Note, there are only 2 GPUs on the machine, but the comand was run on 12 processes, hence 6 processes shared each GPU. Heavy usage might overload the GPUs, but in this case it was fine because the current bottlenecks in `resonet-simulate` are the background and noise routines which both run on CPU (GPU versions of those routines exist in a dev branch and will be available soon). Note the above command will produce small, single-quadrant images for each hit or miss, written to gzipped hdf5 files:
 
+```
+hitfinder_data
+├── commandline.txt
+├── compressed0.h5
+├── compressed10.h5
+├── compressed11.h5
+├── compressed1.h5
+├── compressed2.h5
+├── compressed3.h5
+├── compressed4.h5
+├── compressed5.h5
+├── compressed6.h5
+├── compressed7.h5
+├── compressed8.h5
+└── compressed9.h5
 
+1 directory, 13 files
+```
 
+We can combine the individual `compressed*h5` files into a single master h5 file
+
+```
+resonet-mergefiles hitfinder_data hitfinder_data/master.h5 --prefix compressed
+``` 
+
+This single file contains all of the data needed to train a hit finder, you can view the data using 
+
+```
+resonet-viewsims hitfinder_data/master.h5
+```
+
+Use the arrow keys to page through the images, for example, here's a hit:
+
+<img src="https://smb.slac.stanford.edu/~resonet/hit.png" alt="drawing" width="600"/>
+
+Note, from the labels, `bg_only=0` indicates the image is a hit. Here is an example of a miss:
+
+<img src="https://smb.slac.stanford.edu/~resonet/miss.png" alt="drawing" width="600"/>
+
+Here, `bg_only=1`. These labels can be used for training. Extract it in your own python application like so:
+
+```python
+In [11]: import h5py
+    ...: h = h5py.File('hitfinder_data/master.h5', 'r')
+    ...: imgs = h['images']
+    ...: is_bg_idx = list(h['labels'].attrs['names']).index('bg_only')
+    ...: bg_only = h['labels'][:, is_bg_idx]
+    ...: print("bg only:", bg_only)
+    ...: is_hit = bg_only==0
+    ...: is_miss = bg_only==1
+    ...: nhit = is_hit.sum()
+    ...: assert nhit + is_miss.sum()==imgs.shape[0]
+    ...: print(f'There are {nhit} hits and {imgs.shape[0]-nhit} misses in the dataset.')
+bg only: [1. 0. 0. 1. 1. 0. 0. 0. 1. 1. 1. 1. 0. 0. 0. 1. 1. 0. 1. 0. 0. 1. 0. 0.]
+There are 13 hits and 11 misses in the dataset.
+```
+
+To record a raw image CBF file for each event (**which will increase the disk-usage significantly**), add the `--saveRaw` option to `resonet-simulate`:
+
+```
+mpirun -n 12 resonet-simulate hitfinder_data --nshot 24 --nmos 1 --geom eiger_1_00001.cbf  --randDist --randDistRange 100 300 --randWave --addBad --addHot --randQuad --compress --ngpu=2 --randHits --saveRaw
+```
+
+Doing so, produces an output folder tree like so:
+
+```
+hitfinder_data_wRaw/
+├── cbfs0
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs1
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs10
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs11
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs2
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs3
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs4
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs5
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs6
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs7
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs8
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── cbfs9
+│   ├── shot_1_00000.cbf
+│   └── shot_1_00001.cbf
+├── commandline.txt
+├── compressed0.h5
+├── compressed10.h5
+├── compressed11.h5
+├── compressed1.h5
+├── compressed2.h5
+├── compressed3.h5
+├── compressed4.h5
+├── compressed5.h5
+├── compressed6.h5
+├── compressed7.h5
+├── compressed8.h5
+└── compressed9.h5
+
+13 directories, 37 files
+```
+
+The CBF files can be viewed using dials, provided one runs
+
+```
+mamba install conda-forge::dials
+dials.image_viewer hitfinder_data_wRaw/cbfs0/*.cbf
+```
+
+The data within the files can be accessed using dxtbx
+
+```python
+In [1]: import dxtbx
+
+In [2]: loader = dxtbx.load("hitfinder_data_wRaw/cbfs0/shot_1_00000.cbf")
+
+In [3]: img = loader.get_raw_data().as_numpy_array()
+
+In [4]: img.shape
+Out[4]: (4362, 4148)
+
+In [5]: img
+Out[5]: 
+array([[0.97489439, 4.97415801, 5.02806762, ..., 2.97468385, 3.09162862,
+        0.99214861],
+       [0.        , 4.99946204, 3.0456722 , ..., 0.        , 2.00565392,
+        7.12990819],
+       [7.97878437, 2.99278772, 1.04721938, ..., 2.00436302, 3.24306128,
+        4.01233559],
+       ...,
+       [1.9323636 , 1.99435584, 2.0673222 , ..., 6.00180653, 3.98698331,
+        0.98564827],
+       [2.01594795, 3.02300682, 4.92438177, ..., 5.89689004, 3.03609653,
+        1.00385678],
+       [1.90858572, 1.00396392, 4.20959378, ..., 2.98527054, 1.01366   ,
+        1.00754621]])
+
+```
 
