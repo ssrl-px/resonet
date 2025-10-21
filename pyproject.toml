@@ -15,7 +15,8 @@ dependencies = [
     "fabio",
     "dxtbx",
     "joblib",
-    "tqdm"
+    "tqdm",
+    "segmentation-models-pytorch"
 ]
 
 [tool.setuptools.packages.find]
