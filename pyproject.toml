@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "resonet"
-version = "0.1"
+version = "1.0.0"
 dependencies = [
     "h5py",
     "numpy",
